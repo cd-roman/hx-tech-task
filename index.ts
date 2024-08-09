@@ -3,6 +3,7 @@
 // Define the type of the grid size, coordinates, and direction
 type GridSize = [number, number];
 type Coords = [number, number];
+type Command = "L" | "R" | "M";
 type Direction = "N" | "E" | "S" | "W";
 
 // Define the Robot interface
@@ -18,31 +19,36 @@ const directions: Direction[] = ["N", "E", "S", "W"];
 function parseInput(input: string): {
   gridSize: GridSize;
   robots: Robot[];
+  commands: Command[];
 } {
   const lines = input.trim().split("\n");
-  const totalLines = lines.length;
 
-  if (totalLines % 2 !== 1) {
-    throw new Error("Invalid input format. Expected an odd number of lines.");
-  }
+  const [gridX, gridY] = parseGridSize(lines[0]);
+  const gridSize: GridSize = [gridX, gridY];
 
-  const [gridX, gridY] = lines[0].split(" ").map(Number);
+  const robots = parseRobotsData(lines.slice(1));
+
+  const commands = parseCommands(lines);
+
+  return { gridSize, robots, commands };
+}
+
+function parseGridSize(line: string): [number, number] {
+  const [gridX, gridY] = line.split(" ").map(Number);
   if (isNaN(gridX) || isNaN(gridY) || gridX <= 0 || gridY <= 0) {
     throw new Error("Invalid grid size.");
   }
-  const gridSize: GridSize = [gridX, gridY];
+  return [gridX, gridY];
+}
 
+function parseRobotsData(lines: string[]): Robot[] {
   const robots: Robot[] = [];
-  for (let i = 1; i < totalLines; i += 2) {
+  for (let i = 0; i < lines.length; i += 2) {
     const [x, y, direction] = lines[i].split(" ");
     const xNum = Number(x);
     const yNum = Number(y);
 
-    if (
-      isNaN(xNum) ||
-      isNaN(yNum) ||
-      !directions.includes(direction as Direction)
-    ) {
+    if (!directions.includes(direction as Direction)) {
       throw new Error("Invalid robot data format.");
     }
 
@@ -51,51 +57,86 @@ function parseInput(input: string): {
       direction: direction as Direction,
     });
   }
-
-  return { gridSize, robots };
+  return robots;
 }
 
-// Move the robot based on the commands provided
-function moveRobot(robot: Robot, commands: string, gridSize: GridSize) {
-  const directionMap: { [key: string]: (dir: Direction) => Direction } = {
-    L: (dir: Direction) => directions[(directions.indexOf(dir) + 3) % 4],
-    R: (dir: Direction) => directions[(directions.indexOf(dir) + 1) % 4],
-  };
+function parseCommands(lines: string[]): Command[] {
+  return lines
+    .filter((_, i) => i % 2 === 0 && i !== 0)
+    .map((command) => {
+      const validCommands = ["L", "R", "M"];
+      const isValidCommand = [...command].every((char) =>
+        validCommands.includes(char)
+      );
 
-  const moveMap: { [key in Direction]: (coords: [number, number]) => void } = {
-    N: (coords: [number, number]) => {
-      if (coords[1] < gridSize[1]) coords[1]++;
-    },
-    E: (coords: [number, number]) => {
-      if (coords[0] < gridSize[0]) coords[0]++;
-    },
-    S: (coords: [number, number]) => {
-      if (coords[1] > 0) coords[1]--;
-    },
-    W: (coords: [number, number]) => {
-      if (coords[0] > 0) coords[0]--;
-    },
-  };
+      if (!isValidCommand) {
+        throw new Error(`Invalid command found: ${command}`);
+      }
 
+      return command as Command;
+    });
+}
+
+const leftTurnMap: { [key in Direction]: Direction } = {
+  N: "W",
+  E: "N",
+  S: "E",
+  W: "S",
+};
+
+const rightTurnMap: { [key in Direction]: Direction } = {
+  N: "E",
+  E: "S",
+  S: "W",
+  W: "N",
+};
+
+const directionMap: { [key: string]: (dir: Direction) => Direction } = {
+  L: (dir: Direction) => leftTurnMap[dir],
+  R: (dir: Direction) => rightTurnMap[dir],
+};
+
+const moveMap: {
+  [key in Direction]: (coords: [number, number], gridSize: GridSize) => void;
+} = {
+  N: (coords: [number, number], gridSize: GridSize) => {
+    if (coords[1] < gridSize[1]) coords[1]++;
+  },
+  E: (coords: [number, number], gridSize: GridSize) => {
+    if (coords[0] < gridSize[0]) coords[0]++;
+  },
+  S: (coords: [number, number], gridSize: GridSize) => {
+    if (coords[1] > 0) coords[1]--;
+  },
+  W: (coords: [number, number], gridSize: GridSize) => {
+    if (coords[0] > 0) coords[0]--;
+  },
+};
+
+function moveRobot(
+  gridSize: GridSize,
+  robot: Robot,
+  commands: string,
+  robotIndex: number
+) {
+  console.log(`Starting to move robot ${robotIndex + 1}`);
   for (const command of commands) {
     if (command === "L" || command === "R") {
       robot.direction = directionMap[command](robot.direction);
     } else if (command === "M") {
-      moveMap[robot.direction](robot.coords);
+      moveMap[robot.direction](robot.coords, gridSize);
     }
   }
+  console.log(`Finished moving robot ${robotIndex + 1}`);
 }
 
 // Process the input string and output the final positions of the robots
 export function processInput(input: string) {
-  const { gridSize, robots } = parseInput(input);
-  const commands = input
-    .trim()
-    .split("\n")
-    .filter((_, i) => i % 2 === 0 && i !== 0);
+  const { gridSize, robots, commands } = parseInput(input);
 
-  robots.forEach((robot, index) => {
-    moveRobot(robot, commands[index], gridSize);
-    console.log(`${robot.coords[0]} ${robot.coords[1]} ${robot.direction}`);
+  robots.forEach((robot, robotIndex) => {
+    moveRobot(gridSize, robot, commands[robotIndex], robotIndex);
   });
+
+  return robots;
 }
